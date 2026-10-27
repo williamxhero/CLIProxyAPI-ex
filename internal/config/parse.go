@@ -125,5 +125,6 @@ func ParseConfigBytes(data []byte) (*Config, error) {
 	cfg.SanitizeOAuthRequestScopedErrors()
 	cfg.SanitizePayloadRules()
 
+	cfg.ResourceCatalog.sourceRows = resourceSourceRows(&cfg, nil)
 	return &cfg, nil
 }

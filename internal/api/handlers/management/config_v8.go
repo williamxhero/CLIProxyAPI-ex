@@ -26,6 +26,7 @@ func (h *Handler) ConfigV8(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "read_failed"})
 		return
 	}
+	sourceData := append([]byte(nil), data...)
 	data, _, err = config.NormalizeConfigLayout(data, true)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid_config", "message": err.Error()})
@@ -175,6 +176,19 @@ func (h *Handler) ConfigV8(c *gin.Context) {
 	data, _, err = config.NormalizeConfigLayout(data, true)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_config", "message": err.Error()})
+		return
+	}
+	// Catalog provenance belongs to the native v8 entry, never shared v0 saves.
+	if len(parts) == 0 || parts[0] == "api-keys" {
+		if err = config.ValidateResourceManagementUpdate(sourceData, data, h.cfg); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "resource_source_changed", "message": err.Error()})
+			return
+		}
+	}
+	// Bind the next runtime view to the exact normalized document being saved.
+	next, err = config.ParseConfigBytes(data)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid_config", "message": err.Error()})
 		return
 	}
 	// Save the validated canonical tree directly: projecting runtime defaults

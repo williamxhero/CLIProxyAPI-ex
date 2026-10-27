@@ -27,11 +27,26 @@ func matchProvider(provider string, targets []string) (string, bool) {
 }
 
 func (w *Watcher) start(ctx context.Context) error {
+	w.clientsMutex.RLock()
+	inventoryEnabled := w.resourceInventoryHook != nil
+	w.clientsMutex.RUnlock()
+	if inventoryEnabled {
+		w.ReloadConfigIfChanged()
+	}
 	if errAddConfig := w.watcher.Add(w.configPath); errAddConfig != nil {
 		log.Errorf("failed to watch config file %s: %v", w.configPath, errAddConfig)
 		return errAddConfig
 	}
 	log.Debugf("watching config file: %s", w.configPath)
+	if inventoryEnabled {
+		// Marker publication and external atomic saves replace the file object.
+		// Keep a directory anchor: file-only watches can disappear on replacement.
+		// handleEvent still filters by the exact config path and debounces reloads.
+		if errAddConfigDir := w.watcher.Add(filepath.Dir(w.configPath)); errAddConfigDir != nil {
+			log.Error("resource inventory config directory watch setup failed")
+			return errAddConfigDir
+		}
+	}
 
 	if errAddAuthDir := w.watcher.Add(w.authDir); errAddAuthDir != nil {
 		log.Errorf("failed to watch auth directory %s: %v", w.authDir, errAddAuthDir)
@@ -78,6 +93,9 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		return
 	}
 
+	if errInventory := w.ReconcileResourceInventory(); errInventory != nil {
+		log.Warn("resource inventory reconciliation pending")
+	}
 	now := time.Now()
 	log.Debugf("file system event detected: %s %s", event.Op.String(), event.Name)
 

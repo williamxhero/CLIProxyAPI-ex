@@ -18,6 +18,8 @@ func (s *Server) registerManagementV8Routes() {
 	v8.Use(s.managementAvailabilityMiddleware(), s.mgmt.Middleware(), func(c *gin.Context) {
 		c.Set(management.ConfigV8ContextKey, true)
 	})
+	v8.GET("/resource-capabilities", s.mgmt.ResourceCapabilities)
+	v8.GET("/resources", s.mgmt.Resources)
 	v8.GET("/config", s.mgmt.ConfigV8)
 	v8.PUT("/config", s.mgmt.ConfigV8)
 	v8.PATCH("/config", s.mgmt.ConfigV8)
@@ -60,4 +62,12 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/plugins/:id/quota", s.mgmt.GetPluginQuota)
 	v8.POST("/plugins/:id/quota", s.mgmt.FetchPluginQuota)
 	v8.DELETE("/plugins/:id/quota", s.mgmt.ResetPluginQuota)
+}
+
+// ReconcileResourceInventory connects persisted source events to the read-only catalog.
+func (s *Server) ReconcileResourceInventory() error {
+	if s == nil || s.mgmt == nil {
+		return nil
+	}
+	return s.mgmt.ReconcileResourceInventory()
 }

@@ -4,8 +4,19 @@
 // debug settings, proxy configuration, and API keys.
 package config
 
+// ResourceCatalogConfig explicitly enables instance-local inventory migration.
+type ResourceCatalogConfig struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	StateDir string `yaml:"state-dir,omitempty" json:"-"`
+	// sourceDocument fences the loaded manual-save projection, never resource identity.
+	sourceDocument string `yaml:"-" json:"-"`
+	// sourceRows is an immutable receipt of this writer's represented source rows.
+	sourceRows resourceSourceReceipt
+}
+
 // Config represents the application's configuration, loaded from a YAML file.
 type Config struct {
+	ResourceCatalog ResourceCatalogConfig `yaml:"resource-catalog,omitempty" json:"resource-catalog"`
 	// Models selects optional catalog sources independently for each catalog.
 	Models ModelCatalogs `yaml:"models" json:"models"`
 

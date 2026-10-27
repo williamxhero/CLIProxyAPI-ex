@@ -15,6 +15,10 @@ refs/*
 plugins/*
 examples/plugin/bin/*
 
+# Opt-in local resource catalog and credential-bearing migration backups
+.resource-catalog/
+*.catalog-v1-backup
+
 # Storage backends
 pgstore/*
 gitstore/*
@@ -31,6 +35,8 @@ auths/*
 # Documentation
 docs/*
 !docs/management-api-v8.md
+!docs/resource-catalog-v1.md
+!docs/resource-catalog-v1-verification.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md

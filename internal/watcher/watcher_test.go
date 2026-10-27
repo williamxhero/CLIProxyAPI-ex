@@ -983,17 +983,23 @@ func TestHandleEventConfigChangeSchedulesReload(t *testing.T) {
 	}
 
 	var reloads int32
+	reloaded := make(chan struct{}, 1)
 	w := &Watcher{
 		authDir:        authDir,
 		configPath:     configPath,
 		lastAuthHashes: make(map[string]string),
-		reloadCallback: func(*config.Config) { atomic.AddInt32(&reloads, 1) },
+		reloadCallback: func(*config.Config) {
+			atomic.AddInt32(&reloads, 1)
+			reloaded <- struct{}{}
+		},
 	}
 	w.SetConfig(&config.Config{AuthDir: authDir})
 
 	w.handleEvent(fsnotify.Event{Name: configPath, Op: fsnotify.Write})
 
-	time.Sleep(400 * time.Millisecond)
+	// Synchronize with the real reload callback, not an elapsed scheduling guess.
+	// The enclosing go test timeout still bounds a missing callback.
+	<-reloaded
 	if atomic.LoadInt32(&reloads) != 1 {
 		t.Fatalf("expected config change to trigger reload once, got %d", reloads)
 	}

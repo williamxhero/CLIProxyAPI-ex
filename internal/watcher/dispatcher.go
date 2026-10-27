@@ -13,6 +13,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/watcher/synthesizer"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	log "github.com/sirupsen/logrus"
 )
 
 var snapshotCoreAuthsFunc = snapshotCoreAuths
@@ -86,6 +87,11 @@ func (w *Watcher) dispatchPersistedAuthUpdate(update AuthUpdate) bool {
 }
 
 func (w *Watcher) dispatchPersistedAuthUpdateWithRevision(update *AuthUpdate) (bool, uint64) {
+	if w != nil {
+		if errInventory := w.ReconcileResourceInventory(); errInventory != nil {
+			log.Warn("resource inventory reconciliation pending")
+		}
+	}
 	if w == nil || update == nil {
 		return false, 0
 	}

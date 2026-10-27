@@ -12,8 +12,25 @@ import (
 // SaveConfigPreserveComments writes the config back to YAML while preserving existing comments
 // and key ordering by loading the original file into a yaml.Node tree and updating values in-place.
 // Existing v8 documents are saved in the latest layout. Successful migration
-// also synchronizes cfg's OAuth scope for runtime snapshots.
+// also synchronizes cfg's OAuth scope for runtime snapshots. The caller must hold
+// exclusive access to cfg, as management handlers already do with their mutex.
 func SaveConfigPreserveComments(configFile string, cfg *Config, migrateV8 ...bool) error {
+	return saveConfigPreserveComments(configFile, cfg, false, false, migrateV8...)
+}
+
+// SaveConfigPreserveCommentsForManagement retains writer-owned source context
+// across the existing JSON replacement APIs. It never validates catalog identity.
+func SaveConfigPreserveCommentsForManagement(configFile string, cfg *Config, migrateV8 ...bool) error {
+	return saveConfigPreserveComments(configFile, cfg, true, false, migrateV8...)
+}
+
+// SaveConfigPreserveCommentsLegacyManagement keeps the deprecated API on its
+// pre-catalog save semantics. New management source protection belongs to v8.
+func SaveConfigPreserveCommentsLegacyManagement(configFile string, cfg *Config, migrateV8 ...bool) error {
+	return saveConfigPreserveComments(configFile, cfg, false, true, migrateV8...)
+}
+
+func saveConfigPreserveComments(configFile string, cfg *Config, managementJSON, legacyManagement bool, migrateV8 ...bool) error {
 	persistCfg := cfg
 	migrating := len(migrateV8) > 0 && migrateV8[0]
 	// Load original YAML as a node tree to preserve comments and ordering.
@@ -33,6 +50,17 @@ func SaveConfigPreserveComments(configFile string, cfg *Config, migrateV8 ...boo
 		return fmt.Errorf("expected root mapping node")
 	}
 	layout := deepCopyNode(original.Content[0])
+	sourceRef, errSource := resourceDocumentSourceRef(layout)
+	if errSource != nil {
+		return errSource
+	}
+	var expectedRef string
+	if cfg != nil {
+		expectedRef = cfg.ResourceCatalog.sourceDocument
+	}
+	if !legacyManagement && sourceRef != expectedRef {
+		return fmt.Errorf("resource source changed; reload before saving")
+	}
 	flat, err := flattenV8(layout)
 	if err != nil {
 		return err
@@ -57,6 +85,12 @@ func SaveConfigPreserveComments(configFile string, cfg *Config, migrateV8 ...boo
 		return fmt.Errorf("expected generated root mapping node")
 	}
 
+	if managementJSON {
+		if err = restoreResourceManagementReferences(generated.Content[0], cfg.ResourceCatalog.sourceRows); err != nil {
+			return err
+		}
+	}
+
 	// Keep obsolete roots until v8 migration can preserve them as comments.
 	if !migrating {
 		removeLegacyAuthBlock(original.Content[0])
@@ -73,7 +107,8 @@ func SaveConfigPreserveComments(configFile string, cfg *Config, migrateV8 ...boo
 
 	// Merge generated into original in-place, preserving comments/order of existing nodes.
 	mergeMappingPreserve(original.Content[0], generated.Content[0])
-	if err = restoreV8Layout(original.Content[0], layout, data, generated.Content[0]); err != nil {
+	projection := make(resourceSaveProjection)
+	if err = restoreV8Layout(original.Content[0], layout, data, generated.Content[0], projection, cfg.ResourceCatalog.sourceRows, !legacyManagement); err != nil {
 		return err
 	}
 	if !migrating {
@@ -113,8 +148,27 @@ func SaveConfigPreserveComments(configFile string, cfg *Config, migrateV8 ...boo
 			return fmt.Errorf("decode migrated config: %w", err)
 		}
 	}
+	if legacyManagement {
+		if err = os.WriteFile(configFile, data, 0600); err != nil {
+			return err
+		}
+		if migrated != nil {
+			cfg.OAuthOnlyFields = migrated.OAuthOnlyFields
+		}
+		return nil
+	}
+	nextSourceRef, updates, errProjection := projection.prepare(cfg, data)
+	if errProjection != nil {
+		return errProjection
+	}
+	nextRows := resourceSourceRows(cfg, updates)
 	if err = os.WriteFile(configFile, data, 0600); err != nil {
 		return err
+	}
+	cfg.ResourceCatalog.sourceDocument = nextSourceRef
+	cfg.ResourceCatalog.sourceRows = nextRows
+	for binding, next := range updates {
+		*binding = next
 	}
 	if migrated != nil {
 		// Keep runtime-only values intact and publish scope only after the write succeeds.

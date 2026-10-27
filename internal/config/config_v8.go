@@ -252,7 +252,12 @@ func (cfg *Config) UnmarshalYAML(node *yaml.Node) error {
 	if errValidate := decoded.Models.Validate(); errValidate != nil {
 		return errValidate
 	}
+	sourceRef, err := resourceDocumentSourceRef(node)
+	if err != nil {
+		return err
+	}
 	*cfg = Config(decoded)
+	cfg.ResourceCatalog.sourceDocument = sourceRef
 	cfg.OAuthOnlyFields = nil
 	source := expandConfigAliases(node)
 	for _, path := range v8Paths {
@@ -339,7 +344,7 @@ func flattenV8(node *yaml.Node) (*yaml.Node, error) {
 	}
 	for _, family := range v8KeyFamilies {
 		if groups := yamlPath(node, "api-keys."+family.current); groups != nil {
-			keys, err := expandV8Groups(groups, family.current)
+			keys, err := expandV8Groups(groups, family.current, resourceProjectionRequired(node, groups))
 			if err != nil {
 				return nil, err
 			}
@@ -355,7 +360,7 @@ var sharedKeyFields = map[string]bool{
 	"request-retry": true, "request-scoped-errors": true,
 }
 
-func expandV8Groups(groups *yaml.Node, provider string) (*yaml.Node, error) {
+func expandV8Groups(groups *yaml.Node, provider string, manualProvenance bool) (*yaml.Node, error) {
 	if groups.Kind != yaml.SequenceNode {
 		return nil, fmt.Errorf("api-keys.%s must be a list", provider)
 	}
@@ -371,13 +376,27 @@ func expandV8Groups(groups *yaml.Node, provider string) (*yaml.Node, error) {
 		if err := validateWeightSequenceNode(keys, "api-keys."+provider+".keys"); err != nil {
 			return nil, err
 		}
+		var sourceRef string
+		if manualProvenance {
+			var err error
+			sourceRef, err = resourceGroupSourceRef(group, index)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if provider == "openai-compatibility" {
 			item := deepCopyNode(group)
+			if manualProvenance {
+				setYAMLPath(item, "resource-source-ref", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: sourceRef})
+			}
 			deleteYAMLPath(item, "keys")
 			deleteYAMLPath(item, "auth_index")
 			deleteYAMLPath(item, "auth-index")
 			cleanKeys := deepCopyNode(keys)
-			for _, k := range cleanKeys.Content {
+			for keyIndex, k := range cleanKeys.Content {
+				if manualProvenance {
+					setYAMLPath(k, "resource-source-ref", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprintf("%s/%d", sourceRef, keyIndex)})
+				}
 				deleteYAMLPath(k, "auth_index")
 				deleteYAMLPath(k, "auth-index")
 			}
@@ -387,11 +406,11 @@ func expandV8Groups(groups *yaml.Node, provider string) (*yaml.Node, error) {
 		}
 		for i := 0; i < len(group.Content); i += 2 {
 			field := group.Content[i].Value
-			if field != "name" && field != "base-url" && field != "keys" && !sharedKeyFields[field] {
+			if field != "name" && field != "base-url" && field != "keys" && field != "resource-id" && !sharedKeyFields[field] {
 				return nil, fmt.Errorf("api-keys.%s: unsupported group field %s", provider, field)
 			}
 		}
-		for _, key := range keys.Content {
+		for keyIndex, key := range keys.Content {
 			if key.Kind != yaml.MappingNode {
 				return nil, fmt.Errorf("api-keys.%s key must be a mapping", provider)
 			}
@@ -413,6 +432,15 @@ func expandV8Groups(groups *yaml.Node, provider string) (*yaml.Node, error) {
 					setYAMLPath(item, key.Content[i].Value, key.Content[i+1])
 				}
 			}
+			if marker := copyYAMLPathValue(group, "resource-id"); marker != nil {
+				setYAMLPath(item, "resource-group-id", marker)
+				if name := copyYAMLPathValue(group, "name"); name != nil {
+					setYAMLPath(item, "resource-group-name", name)
+				}
+			}
+			if manualProvenance {
+				setYAMLPath(item, "resource-source-ref", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprintf("%s/%d", sourceRef, keyIndex)})
+			}
 			out.Content = append(out.Content, item)
 		}
 	}
@@ -425,10 +453,14 @@ func groupLegacyKeys(keys *yaml.Node, provider string) *yaml.Node {
 	out := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	for index, entry := range keys.Content {
 		group := deepCopyNode(entry)
+		deleteYAMLPath(group, "resource-source-ref")
 		if provider == "openai-compatibility" {
 			entries := yamlPath(group, "api-key-entries")
 			if entries == nil {
 				entries = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			}
+			for _, key := range entries.Content {
+				deleteYAMLPath(key, "resource-source-ref")
 			}
 			setYAMLPath(group, "keys", entries)
 			deleteYAMLPath(group, "api-key-entries")
@@ -436,6 +468,7 @@ func groupLegacyKeys(keys *yaml.Node, provider string) *yaml.Node {
 			group = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			setYAMLPath(group, "name", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprintf("%s-%d", provider, index+1)})
 			key := deepCopyNode(entry)
+			deleteYAMLPath(key, "resource-source-ref")
 			for i := 0; i < len(entry.Content); i += 2 {
 				field := entry.Content[i].Value
 				if field == "base-url" || sharedKeyFields[field] {
@@ -573,7 +606,7 @@ func IsV8ConfigLayout(root *yaml.Node) bool {
 }
 
 func v8AllowedRoots() map[string]bool {
-	allowed := map[string]bool{"models": true, "config-version": true, "api-keys": true, "plugins": true, "quota-exceeded": true, "client": true}
+	allowed := map[string]bool{"models": true, "resource-catalog": true, "config-version": true, "api-keys": true, "plugins": true, "quota-exceeded": true, "client": true}
 	for _, path := range v8Paths {
 		section, _, _ := strings.Cut(path.current, ".")
 		allowed[section] = true
@@ -739,7 +772,7 @@ func normalizeV8PrivateIPAlias(root *yaml.Node, migrate bool) (bool, error) {
 
 // restoreV8Layout lets v0 handlers update the effective runtime fields without
 // reintroducing their legacy spellings into an existing v8 document.
-func restoreV8Layout(root, layout *yaml.Node, original []byte, generated *yaml.Node) error {
+func restoreV8Layout(root, layout *yaml.Node, original []byte, generated *yaml.Node, projection resourceSaveProjection, receipt resourceSourceReceipt, protectResources bool) error {
 	for _, path := range v8Paths {
 		upstreams := yamlPath(layout, "api-keys")
 		clientKeyCollision := path.old == "api-keys" && upstreams != nil && upstreams.Kind == yaml.MappingNode
@@ -758,6 +791,7 @@ func restoreV8Layout(root, layout *yaml.Node, original []byte, generated *yaml.N
 	for _, family := range v8KeyFamilies {
 		groups := yamlPath(layout, "api-keys."+family.current)
 		if groups == nil {
+			projection.ungrouped(family.current, yamlPath(generated, family.old))
 			continue
 		}
 		if baseline == nil {
@@ -781,12 +815,32 @@ func restoreV8Layout(root, layout *yaml.Node, original []byte, generated *yaml.N
 				return err
 			}
 		}
-		if !reflect.DeepEqual(before, after) {
+		represented := yamlPath(baseline, family.old)
+		ownedProjectionChanged := false
+		if protectResources && receipt != nil && resourceProjectionRequired(layout, groups) {
+			owned := receipt.projection(family.current)
+			ownedProjectionChanged = !reflect.DeepEqual(resourceSourceReferences(owned), resourceSourceReferences(represented))
+			represented = owned
+		}
+		if !reflect.DeepEqual(before, after) || ownedProjectionChanged {
 			keys := yamlPath(root, family.old)
 			if keys == nil {
 				keys = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 			}
-			groups = groupLegacyKeys(keys, family.current)
+			if protectResources && resourceProjectionRequired(layout, groups) {
+				var errRegroup error
+				groups, errRegroup = regroupResourceKeys(keys, family.current, groups, represented, projection)
+				if errRegroup != nil {
+					return errRegroup
+				}
+			} else {
+				groups = groupLegacyKeys(keys, family.current)
+				projection.ungrouped(family.current, keys)
+			}
+		} else if protectResources && resourceProjectionRequired(layout, groups) {
+			if err := projection.unchanged(family.current, yamlPath(generated, family.old), groups); err != nil {
+				return err
+			}
 		}
 		deleteYAMLPath(root, family.old)
 		setYAMLPath(root, "api-keys."+family.current, groups)

@@ -76,6 +76,15 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 	if auth == nil {
 		return "", fmt.Errorf("auth filestore: auth is nil")
 	}
+	if marker := auth.Attributes[cliproxyauth.AttributeResourceID]; marker != "" {
+		if auth.Metadata == nil {
+			auth.Metadata = map[string]any{}
+		}
+		if existing, ok := auth.Metadata["resource_id"].(string); ok && existing != "" && existing != marker {
+			return "", fmt.Errorf("auth filestore: conflicting source resource marker")
+		}
+		auth.Metadata["resource_id"] = marker
+	}
 	cliproxyauth.NormalizeCredentialMetadata(auth.Metadata)
 	if errWeight := cliproxyauth.ValidateAuthWeight(auth); errWeight != nil {
 		return "", fmt.Errorf("auth filestore: %w", errWeight)
@@ -354,6 +363,9 @@ func (s *FileTokenStore) readAuthFiles(path, baseDir string) ([]*cliproxyauth.Au
 		LastRefreshedAt:  time.Time{},
 		NextRefreshAfter: time.Time{},
 	}
+	if marker, ok := metadata["resource_id"].(string); ok && marker != "" {
+		auth.Attributes[cliproxyauth.AttributeResourceID] = marker
+	}
 	if email, ok := metadata["email"].(string); ok && email != "" {
 		auth.Attributes["email"] = email
 	}
@@ -544,4 +556,11 @@ func deepEqualJSON(a, b any) bool {
 	default:
 		return false
 	}
+}
+
+// BaseDir returns the file scope used to attest source-inventory coverage.
+func (s *FileTokenStore) BaseDir() string {
+	s.dirLock.RLock()
+	defer s.dirLock.RUnlock()
+	return s.baseDir
 }

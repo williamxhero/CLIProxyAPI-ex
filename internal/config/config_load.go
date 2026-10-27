@@ -225,6 +225,8 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 		}
 	}
 
+	cfg.ResourceCatalog.sourceRows = resourceSourceRows(&cfg, nil)
+
 	// Return the populated configuration struct.
 	return &cfg, nil
 }

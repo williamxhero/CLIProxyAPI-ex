@@ -13,6 +13,9 @@ const (
 	AuthSourceObjectStore = "objectstore"
 	AuthSourcePostgres    = "postgres"
 
+	// Source catalog markers are unverified references, never routing eligibility.
+	AttributeResourceID           = "resource_id"
+	AttributeProviderResourceID   = "provider_resource_id"
 	AttributeAPIKey               = "api_key"
 	AttributeAuthKind             = "auth_kind"
 	AttributeCodexAlphaSearch     = "codex_alpha_search"
