@@ -48,7 +48,7 @@ func loadState(dir string) (*diskState, error) {
 }
 func removeTemporaryFile(path string) {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		log.Warn("resource catalog temporary file cleanup failed")
+		log.WithError(err).Warn("resource catalog temporary file cleanup failed")
 	}
 }
 

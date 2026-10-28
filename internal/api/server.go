@@ -409,7 +409,7 @@ func (s *Server) Stop(ctx context.Context) error {
 	defer func() {
 		if s.mgmt != nil {
 			if errClose := s.mgmt.CloseResourceCatalog(); errClose != nil {
-				log.Warn("resource catalog close failed")
+				log.WithError(errClose).Warn("resource catalog close failed")
 			}
 		}
 	}()
