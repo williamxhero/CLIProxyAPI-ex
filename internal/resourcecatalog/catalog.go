@@ -69,7 +69,7 @@ func Open(configPath, authDir, stateDir string) (*Catalog, error) {
 	defer func() {
 		if !success {
 			if errClose := lock.Close(); errClose != nil {
-				log.Warn("resource catalog initialization lock cleanup failed")
+				log.WithError(errClose).Warn("resource catalog initialization lock cleanup failed")
 			}
 		}
 	}()

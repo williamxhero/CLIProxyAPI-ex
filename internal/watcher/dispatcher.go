@@ -89,7 +89,7 @@ func (w *Watcher) dispatchPersistedAuthUpdate(update AuthUpdate) bool {
 func (w *Watcher) dispatchPersistedAuthUpdateWithRevision(update *AuthUpdate) (bool, uint64) {
 	if w != nil {
 		if errInventory := w.ReconcileResourceInventory(); errInventory != nil {
-			log.Warn("resource inventory reconciliation pending")
+			log.WithError(errInventory).Warn("resource inventory reconciliation pending")
 		}
 	}
 	if w == nil || update == nil {
