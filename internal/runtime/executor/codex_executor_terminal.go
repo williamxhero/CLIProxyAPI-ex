@@ -206,6 +206,14 @@ func codexTerminalFailureBody(eventData []byte) ([]byte, bool) {
 	eventType := gjson.GetBytes(eventData, "type").String()
 	var body []byte
 	switch eventType {
+	case "":
+		// Some relays send an error envelope without a JSON event type.
+		// Do not reinterpret typed events or objects without error details.
+		errorObject := gjson.GetBytes(eventData, "error")
+		if !errorObject.IsObject() || (errorObject.Get("type").String() == "" && errorObject.Get("code").String() == "" && errorObject.Get("message").String() == "") {
+			return nil, false
+		}
+		body = codexTerminalErrorBody(eventData, "error")
 	case "error":
 		body = codexTerminalErrorBody(eventData, "error")
 		if len(body) == 0 {
@@ -513,8 +521,17 @@ func isCodexBootstrapBufferableEvent(eventType string, payload []byte) bool {
 		return true
 	}
 	switch eventType {
-	case "response.created", "response.in_progress", "codex.rate_limits", "codex.response.metadata", "keepalive":
+	// response.metadata carries prompt-moderation flags, not generated output. Upstream now sends it
+	// between response.in_progress and a server_is_overloaded rejection, so releasing on it leaked
+	// the rejection to the client instead of failing over (issue #6856).
+	case "response.created", "response.in_progress", "codex.rate_limits", "codex.response.metadata", "response.metadata", "keepalive", "rate_limits.updated":
 		return true
+	case "response.output_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.delta",
+		"response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.refusal.delta":
+		// Only explicit empty string deltas are safe to retain. Missing, null,
+		// structured or non-empty deltas and server-side tool events still commit.
+		delta := gjson.GetBytes(payload, "delta")
+		return delta.Type == gjson.String && delta.String() == ""
 	case "response.output_item.added":
 		return isCodexBufferableOutputItem(payload)
 	case "response.content_part.added":
