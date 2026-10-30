@@ -417,6 +417,13 @@ func (s *Server) Start() error {
 // Returns:
 //   - error: An error if the server fails to stop
 func (s *Server) Stop(ctx context.Context) error {
+	defer func() {
+		if s.mgmt != nil {
+			if errClose := s.mgmt.CloseResourceCatalog(); errClose != nil {
+				log.WithError(errClose).Warn("resource catalog close failed")
+			}
+		}
+	}()
 	log.Debug("Stopping API server...")
 
 	if s.keepAliveEnabled {

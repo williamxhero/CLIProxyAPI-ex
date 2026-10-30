@@ -9,6 +9,15 @@
 # The compatibility notes at the end show old spellings for existing deployments.
 config-version: 8
 
+# Optional file-backed standalone resource inventory. Disabled unless explicitly enabled.
+# Enabling requires an explicit oauth.auth-dir matching the file token store and a restart.
+# Startup may migrate source identity markers and write credential-bearing backups.
+# No independent gate, quota query, or routing protection is enabled by this setting.
+# See docs/resource-catalog-v1.md before opting in or restoring/cloning state.
+# resource-catalog:
+#   enabled: true
+#   state-dir: .resource-catalog  # Relative to this config, outside oauth.auth-dir.
+
 # Optional model catalog sources: http(s) URLs or absolute local file paths.
 # Each explicit source overrides --local-model; otherwise --local-model uses
 # embedded catalogs, and normal mode uses the official remote sources.

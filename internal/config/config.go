@@ -4,6 +4,16 @@
 // debug settings, proxy configuration, and API keys.
 package config
 
+// ResourceCatalogConfig explicitly enables instance-local inventory migration.
+type ResourceCatalogConfig struct {
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
+	StateDir string `yaml:"state-dir,omitempty" json:"-"`
+	// sourceDocument fences the loaded manual-save projection, never resource identity.
+	sourceDocument string `yaml:"-" json:"-"`
+	// sourceRows is an immutable receipt of this writer's represented source rows.
+	sourceRows resourceSourceReceipt
+}
+
 // ServerResponseCompression mirrors SDKConfig.ResponseCompression on the outer
 // Config so JSON and YAML round trips preserve server.response-compression.
 // The canonical storage remains SDKConfig.ResponseCompression; read the
@@ -15,6 +25,7 @@ type Config struct {
 	// ServerResponseCompression is the JSON-visible mirror of the downstream
 	// response compression settings (YAML: server.response-compression).
 	ServerResponseCompression ResponseCompressionConfig `yaml:"-" json:"response-compression"`
+	ResourceCatalog           ResourceCatalogConfig     `yaml:"resource-catalog,omitempty" json:"resource-catalog"`
 	// Models selects optional catalog sources independently for each catalog.
 	Models ModelCatalogs `yaml:"models" json:"models"`
 

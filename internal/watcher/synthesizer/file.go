@@ -235,6 +235,9 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+	if marker, ok := metadata["resource_id"].(string); ok {
+		applyResourceBinding(marker, "", a.Attributes)
+	}
 	// Read priority from auth file.
 	coreauth.ApplyAuthPriorityMetadata(a, metadata)
 	if errWeight := coreauth.ApplyAuthWeightMetadata(a, metadata); errWeight != nil {

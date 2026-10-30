@@ -111,6 +111,7 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeyEntries(ctx *SynthesisContext, en
 			attrs["models_hash"] = hash
 		}
 		addConfigHeadersToAttrs(entry.Headers, attrs)
+		applyResourceBinding(entry.ResourceID, entry.ResourceGroupID, attrs)
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   provider,
@@ -182,6 +183,7 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 			attrs["models_hash"] = hash
 		}
 		addConfigHeadersToAttrs(ck.Headers, attrs)
+		applyResourceBinding(ck.ResourceID, ck.ResourceGroupID, attrs)
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   "claude",
@@ -266,6 +268,7 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 			attrs["models_hash"] = hash
 		}
 		addConfigHeadersToAttrs(entry.Headers, attrs)
+		applyResourceBinding(entry.ResourceID, entry.ResourceGroupID, attrs)
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   provider,
@@ -340,6 +343,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				attrs["models_hash"] = hash
 			}
 			addConfigHeadersToAttrs(compat.Headers, attrs)
+			applyResourceBinding(entry.ResourceID, compat.ResourceID, attrs)
 			a := &coreauth.Auth{
 				ID:         id,
 				Provider:   internalProviderKey,
@@ -382,6 +386,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				attrs["models_hash"] = hash
 			}
 			addConfigHeadersToAttrs(compat.Headers, attrs)
+			applyResourceBinding("", compat.ResourceID, attrs)
 			a := &coreauth.Auth{
 				ID:         id,
 				Provider:   internalProviderKey,
@@ -445,6 +450,7 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 			attrs["interactions"] = "true"
 		}
 		addConfigHeadersToAttrs(compat.Headers, attrs)
+		applyResourceBinding(compat.ResourceID, compat.ResourceGroupID, attrs)
 		metadata := map[string]any{}
 		if compat.DisableCooling != nil {
 			metadata["disable_cooling"] = *compat.DisableCooling

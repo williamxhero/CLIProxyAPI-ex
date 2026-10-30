@@ -102,8 +102,9 @@ type PluginMultiAuthParser interface {
 
 // WatcherWrapper exposes the subset of watcher methods required by the SDK.
 type WatcherWrapper struct {
-	start func(ctx context.Context) error
-	stop  func() error
+	setResourceInventoryHook func(func() error)
+	start                    func(ctx context.Context) error
+	stop                     func() error
 
 	setConfig                    func(cfg *config.Config)
 	snapshotAuths                func() []*coreauth.Auth
@@ -236,4 +237,11 @@ func (w *WatcherWrapper) SetAuthUpdateQueue(queue chan<- watcher.AuthUpdate) {
 		return
 	}
 	w.setUpdateQueue(queue)
+}
+
+// SetResourceInventoryHook connects file-backed source reconciliation when supported.
+func (w *WatcherWrapper) SetResourceInventoryHook(hook func() error) {
+	if w != nil && w.setResourceInventoryHook != nil {
+		w.setResourceInventoryHook(hook)
+	}
 }

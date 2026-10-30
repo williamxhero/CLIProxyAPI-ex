@@ -2549,3 +2549,13 @@ func (m *Manager) warnLogAuthUnavailable(ctx context.Context, providers []string
 		}
 	}
 }
+
+// Storage returns the configured persistence adapter for capability attestation.
+func (m *Manager) Storage() Store {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.store
+}

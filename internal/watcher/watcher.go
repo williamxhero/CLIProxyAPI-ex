@@ -12,11 +12,10 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/watcher/synthesizer"
-	"gopkg.in/yaml.v3"
-
 	sdkAuth "github.com/router-for-me/CLIProxyAPI/v8/sdk/auth"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 // storePersister captures persistence-capable token store methods used by the watcher.
@@ -31,6 +30,7 @@ type authDirProvider interface {
 
 // Watcher manages file watching for configuration and authentication files
 type Watcher struct {
+	resourceInventoryHook      func() error
 	configPath                 string
 	authDir                    string
 	config                     *config.Config
@@ -219,4 +219,22 @@ func (w *Watcher) SnapshotCoreAuths() []*coreauth.Auth {
 	parser := w.pluginAuthParser
 	w.clientsMutex.RUnlock()
 	return snapshotCoreAuths(cfg, authDir, parser)
+}
+
+// SetResourceInventoryHook attaches source reconciliation without changing auth eligibility.
+func (w *Watcher) SetResourceInventoryHook(hook func() error) {
+	w.clientsMutex.Lock()
+	defer w.clientsMutex.Unlock()
+	w.resourceInventoryHook = hook
+}
+
+// ReconcileResourceInventory is also used for persisted writes that precede fsnotify.
+func (w *Watcher) ReconcileResourceInventory() error {
+	w.clientsMutex.RLock()
+	hook := w.resourceInventoryHook
+	w.clientsMutex.RUnlock()
+	if hook == nil {
+		return nil
+	}
+	return hook()
 }

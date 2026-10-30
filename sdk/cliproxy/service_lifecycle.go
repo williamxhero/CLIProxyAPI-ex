@@ -210,6 +210,9 @@ func (s *Service) Run(ctx context.Context) error {
 			return fmt.Errorf("cliproxy: failed to create watcher: %w", errCreate)
 		}
 		s.setWatcher(watcherWrapper)
+		if s.cfg.ResourceCatalog.Enabled {
+			watcherWrapper.SetResourceInventoryHook(s.server.ReconcileResourceInventory)
+		}
 		s.ensureAuthUpdateQueue(ctx)
 		if s.authUpdates != nil {
 			watcherWrapper.SetAuthUpdateQueue(s.authUpdates)
