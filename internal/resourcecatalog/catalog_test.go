@@ -147,3 +147,70 @@ func TestResourceInventoryWriterProcess(t *testing.T) {
 		t.Fatalf("writer process: %v %s", err, output)
 	}
 }
+
+// A physical replacement cannot prove identity continuity, even when it keeps
+// source markers. Credential fencing must nevertheless observe later rotations.
+func TestResourceIdentityBlockedCredentialFences(t *testing.T) {
+	c, path, _ := fixture(t)
+	before, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := before.Resources[1]
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := strings.Replace(string(data), "synthetic-A", "synthetic-B", 1)
+	nextPath := path + ".replacement"
+	if err = os.WriteFile(nextPath, []byte(replacement), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(nextPath, path); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Reconcile(before.Version); err != nil {
+		t.Fatal(err)
+	}
+	after, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated := after.Resources[1]
+	if rotated.ResourceID != first.ResourceID || rotated.Identity != "ambiguous" || rotated.Readiness != "not_ready" {
+		t.Fatal("unproven source replacement did not stay fail-closed")
+	}
+	if rotated.Incarnation == first.Incarnation || rotated.IdentityVersion <= first.IdentityVersion || rotated.CredentialVersion != first.CredentialVersion+1 {
+		t.Fatal("blocked replacement did not fence changed credentials exactly once")
+	}
+	if !errors.Is(c.Check(after.Version, rotated.Target), resourcecatalog.ErrConflict) {
+		t.Fatal("blocked target accepted an observation")
+	}
+	if err = c.Reconcile(after.Version); err != nil {
+		t.Fatal(err)
+	}
+	stable, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stable.Resources[1].Target != rotated.Target || stable.Version != after.Version {
+		t.Fatal("unchanged blocked credentials advanced fencing repeatedly")
+	}
+	if err = os.WriteFile(path, []byte(strings.Replace(replacement, "synthetic-B", "synthetic-C", 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Reconcile(stable.Version); err != nil {
+		t.Fatal(err)
+	}
+	last, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := last.Resources[1]
+	if again.Identity != "ambiguous" || again.Readiness != "not_ready" || again.CredentialVersion != rotated.CredentialVersion+1 || again.Incarnation == rotated.Incarnation || again.IdentityVersion <= rotated.IdentityVersion {
+		t.Fatal("later blocked credential rotation lost fail-closed fencing")
+	}
+}

@@ -78,6 +78,11 @@ func (w *Watcher) reloadConfigIfChanged() {
 	}
 	log.Infof("config file changed, reloading: %s", w.configPath)
 	if w.reloadConfig() {
+		// Inventory follows persisted source bytes independently of whether a stale
+		// runtime snapshot was rejected after a load-time normalization write.
+		if errInventory := w.ReconcileResourceInventory(); errInventory != nil {
+			log.WithError(errInventory).Warn("resource inventory reconciliation pending")
+		}
 		// Record the bytes the reload actually parsed, not the change-check read or a
 		// later re-read: a write landing between them must not count as applied. A
 		// write-back during load only costs one extra reload.

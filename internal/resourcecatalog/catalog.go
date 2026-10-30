@@ -222,7 +222,10 @@ func (c *Catalog) reconcileLocked() error {
 		if r.row.Family == "unsupported" {
 			r.row.Readiness = "unsupported"
 		}
-		if !record.Blocked {
+		// An unproven source replacement stays blocked, but changed credentials
+		// still fence old observations. Never attribute one of several duplicate
+		// sources to the shared record or repeatedly advance an unchanged seal.
+		if counts[r.row.ResourceID] == 1 {
 			if record.CredentialSeal != "" && record.CredentialSeal != credentialSeal {
 				record.Target.Incarnation = uuid.NewString()
 				if !advance(&record.Target.IdentityVersion) {
@@ -232,13 +235,15 @@ func (c *Catalog) reconcileLocked() error {
 					return ErrUnavailable
 				}
 			}
+			record.CredentialSeal = credentialSeal
+		}
+		if !record.Blocked {
 			if record.ConfigSeal != "" && record.ConfigSeal != configSeal {
 				if !advance(&record.Target.ConfigVersion) {
 					return ErrUnavailable
 				}
 			}
 			record.FileSeal = fileSeal
-			record.CredentialSeal = credentialSeal
 			record.ConfigSeal = configSeal
 			if r.row.Kind == "provider" {
 				members := append([]string{}, r.row.Members...)
