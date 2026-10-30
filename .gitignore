@@ -37,6 +37,7 @@ docs/*
 !docs/management-api-v8.md
 !docs/resource-catalog-v1.md
 !docs/resource-catalog-v1-verification.md
+!docs/spec66-candidate-verification-20261027.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md
