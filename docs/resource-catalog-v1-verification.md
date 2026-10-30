@@ -1205,3 +1205,704 @@ Retained open boundaries, not retried or relabeled as successes:
   Linux runtime/durability, physical power-loss acceptance, operational
   clone/rebind/rollback, Home/plugin/other-store or deployment acceptance.
   Gate/query/routing/balance/provider/hourly phases remain **future work**.
+
+
+## Pass 7c follow-up receipt (2026-10-26, owner-local Windows run; incomplete SDK slice)
+
+### Scope, explicit authorization and telemetry isolation
+
+The user explicitly selected task-only telemetry OFF for this task, not a generic
+continuation grant. No global telemetry directory/settings/ACLs were accessed or
+changed. No `go telemetry` or `go env -w` command was run, and no public
+non-settable `GOTELEMETRY`/`GOTELEMETRYDIR` override was fabricated. No model,
+routing policy, credentials, service, provider, network or baseline operation was
+performed. The implementation owner ran checks directly without child agents or
+Codex invocations.
+
+Existing evidence root (all paths below are relative to this root unless stated):
+
+```text
+C:\Users\will\AppData\Local\Temp\cpa-spec66-followup-db557e1f236f494aa64dfa28b69fd9c9
+```
+
+A new directory was created exclusively, with no overwrite:
+`telemetry-off-pass7c-20261026`. Its only file, `mode`, contains exactly
+`off 2026-10-26` (14 bytes, no newline), SHA256
+`3a28ae910769fee6d2be951fb9d8c5d980e67a30e27c9e74fe9cceefd2c0ed4f`.
+Before and after EACH of the three new verification processes, the mode bytes
+and hash were checked and the directory contained only this unchanged file.
+No local/upload/debug/token/counter/report files were observed there.
+`GO_TELEMETRY_CHILD=1` was checked and was not inherited. The sole added
+process-only verification environment override was
+`TEST_TELEMETRY_DIR=<ROOT>\telemetry-off-pass7c-20261026`; descendants inherited it.
+No environment change was persisted.
+
+The actual installed Go source was inspected independently, read-only:
+
+- `C:\Program Files\Go\src\cmd\internal\telemetry\telemetry.go:32-35,44-47`
+  passes `TEST_TELEMETRY_DIR` into Start/MaybeChild.
+- `cmd/internal/telemetry/counter/counter.go:22-25` passes it to OpenDir;
+  vendored `golang.org/x/telemetry/counter/counter.go:109-113` selects NewDir
+  before internal counter.Open.
+- Vendored `internal/counter/file.go:377-389` returns on OFF before opening
+  counter files.
+- Vendored `start.go:44-48,144-173` documents isolated testing and selects the
+  requested directory, then returns on OFF before counter.Open, local stat,
+  upload-token acquisition or sidecar start.
+- Vendored `internal/telemetry/dir.go:36-47,115-149` constructs paths without
+  creating directories and reads/trim-parses the dated OFF mode.
+
+Exact focused excerpts and full source-file hashes are retained in
+`pass7c-source-proof.json`. This is source-based off-short-circuit evidence plus
+controlled mode/directory observations, NOT a network trace.
+
+The existing `go.ps1` was not edited (SHA256
+`b33198b4c339f6a586880ed895fb3b10b207a1d78dc3117433a1964b9d50a609`).
+It retained its original GOCACHE=`<ROOT>\cache`, GOTMPDIR=`<ROOT>\build`,
+GOPROXY=off, GOSUMDB=off, GOTOOLCHAIN=local and existing GCC/PATH setup.
+GOMODCACHE and global settings were unchanged; no alternate cache was created.
+The task-only mode and receipt helper are evidence files, not project changes.
+
+### Commands and retained execution distinctions
+
+All Go test argv below have the exact prefix:
+
+```text
+powershell.exe -NoProfile -File <ROOT>\go.ps1 -C D:/WILL/AGENT/CPA/CLIProxyAPI-source
+```
+
+Middleware tail (identical in the historical RED, historical exit-0-with-denial,
+and new clean check):
+
+```text
+test -race ./internal/api/middleware -run ^TestRequestLoggingMiddleware_StreamingPreservesFullUUIDForLogger$ -count=10 -timeout=180s
+```
+
+SDK original normal-scheduler tail:
+
+```text
+test ./sdk/cliproxy -run '^(TestHandleAuthUpdates_SameRevisionWaitDoesNotWaitForOtherAuthInBatch|TestEndToEndAuthFileReplacement_RestoresModelsInV1ModelsWithoutRestart|TestEndToEndAuthFilePatch_RestoresModelsInV1ModelsWithoutRestart)$' -count=10 -v -timeout=180s
+```
+
+The authorized bounded original SDK counterpart has the SAME argv with a final
+`-cpu=1`. Exact argument arrays (no shell-quoting ambiguity), sole scoped extra
+environment override, exit/timing, unfiltered complete stdout/stderr and SHA256
+are retained as `<prefix>.argv.json`, `.result.json`, `.stdout.log`, `.stderr.log`.
+Historical Pass 7b files were read and retained, not overwritten or reproduced;
+`pass7c-retained-pass7b-hashes.json` captures their file hashes.
+
+| Prefix | Exit | Wall seconds | Meaning |
+| --- | ---: | ---: | --- |
+| `pass7b-middleware-red` | 1 | 30.3828871 | Historical actual RED: processStreamingChunks read / Finalize channel-clear race |
+| `pass7b-middleware-green` | 0 | 11.4962568 | Historical exit 0 but stderr upload-token Access is denied; NOT clean acceptance |
+| `pass7c-middleware-clean` | 0 | 27.2961963 | New clean race check under explicitly changed task-only telemetry environment |
+| `pass7c-sdk-original-normal` | 0 | 27.3143928 | Unmodified SDK original normal scheduler: all three tests passed 10 times each |
+| `pass7c-sdk-original-cpu1` | 0 | 15.1512499 | Unmodified SDK original cpu=1: all three tests passed 10 times each |
+
+Exact retained timings and output signatures:
+
+- `pass7b-middleware-red`: 2026-10-26T12:16:20.4982836+08:00 -> 2026-10-26T12:16:50.8877586+08:00.
+  stdout SHA256 `021d23441d02e755057550a680f00e70af3eeca5ddf871e98e1d56355d3f1f94`;
+  stderr SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+- `pass7b-middleware-green`: 2026-10-26T12:17:17.7238096+08:00 -> 2026-10-26T12:17:29.2250927+08:00.
+  stdout SHA256 `70bc7c252b26c78b1c03ddc3af688e6ad0c4bac343e7d976d3216c2975879bf0`;
+  stderr SHA256 `9b9097b7d070c430564297e3b831f60f5a7a40cfb93416cfe6571a6c35e6014a`.
+
+- `pass7c-middleware-clean`: 2026-10-26T12:41:46.083621+08:00 -> 2026-10-26T12:42:13.379477+08:00.
+  stdout SHA256 `7b4f67b7e7f3c22a856e4931cd8eeeee4854a65556617ac5c315f28023160654`;
+  stderr SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+- `pass7c-sdk-original-normal`: 2026-10-26T12:42:22.244671+08:00 -> 2026-10-26T12:42:49.558414+08:00.
+  stdout SHA256 `719abe0a6062b32763a74c550e88f23ae3670b20364865419c9697c1bef067c9`;
+  stderr SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+- `pass7c-sdk-original-cpu1`: 2026-10-26T12:43:19.116682+08:00 -> 2026-10-26T12:43:34.267597+08:00.
+  stdout SHA256 `a672f9278479a9c5aeadf6b27f44d6128890c31da6308ee5995b0753b1ef07b5`;
+  stderr SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+The new middleware check had empty stderr and package time 4.001s. Its complete
+stdout was inspected as well. The pre-existing minimal production repair was
+preserved byte-for-byte: close chunkChannel, wait for streamDone, only then clear
+chunkChannel. No rollback was used to manufacture a new RED. These are three
+distinct executions, NOT a paired original-base comparison.
+
+### SDK evidence gate and deliberately incomplete work
+
+Before considering edits, the actual test, handleAuthUpdates, runtimeAuthSyncHook,
+model-registration task execution and per-auth completion contracts were read.
+The current test blocks the second no-argument modelRegistrationTaskHook call;
+that call carries no auth identity and concurrent workers need not execute in
+input order. On failure its cleanup releases the blocked hook without joining
+the batch and duplicate-update goroutines before clearing the hook and
+unregistering the global registry clients. These are inspected potential test
+synchronization/cleanup mechanisms, NOT proof of baseline-only causality or of
+the historical replacement/patch model failures.
+
+Both authorized bounded ORIGINAL SDK commands passed: 30 named test passes per
+run, no failed assertions, empty stderr, package times 7.979s (normal) and
+10.751s (cpu=1). Thus NO functional SDK RED was obtained. No synchronization,
+cleanup, fixture, assertion, production hook, low-level seam or SDK production
+code was changed; no deterministic new regression was introduced without an
+established failing case. A-not-waiting-for-B, terminal-error model absence and
+actual replacement/patch recovery assertions remain unchanged. This is a
+non-reproduction receipt, NOT an SDK RED-to-GREEN repair claim. The SDK slice
+remains incomplete under the specified gate.
+
+### Checks not run, integrity and remaining gates
+
+Because both repaired slices did not succeed, Phase 3 was not entered:
+no gofmt, focused vet, full two-package non-race suite or named SDK race run was
+performed. No Go file was newly modified in Pass 7c. In particular, an SDK
+original pass is not relabeled a post-repair GREEN. No full-repository tests,
+cmd/server build/EXE, new frozen candidate or acceptance action was performed.
+
+Read-only start integrity matched the dispatched branch
+`claude/spec66-resource-catalog`, HEAD/base
+`a4acc9f752bd46571f737a10c04bf413656ab06b`, 51 staged files +7751/-51,
+cached raw binary diff SHA256
+`eebc1ae61b90da02c1293f09a2bac129991339b5d9644f7efbc493cf9118a777`,
+raw index SHA256
+`01e11b190172f6af2922903329519a73c99e2ae0fb6cb8f9ad98da620ff3ef46`,
+and raw for-each-ref stdout SHA256
+`c8a30bba3783770da61923945250c55d32700a718afd8c8509672c17949e6410`.
+Read-only after-integrity is recorded in `pass7c-after-integrity.json`, using
+GIT_OPTIONAL_LOCKS=0 and GIT_NO_LAZY_FETCH=1. Expected full unstaged path list:
+`internal/api/middleware/response_writer.go` (preserved prior repair) and
+`docs/resource-catalog-v1-verification.md` (this append only). No untracked
+project files are expected. Worktree and cached whitespace-check outputs/exits
+are retained with the after-integrity receipt. Original documentation bytes
+are prefix-verified, preserving all historical failures/stopped attempts.
+
+No staging/index/ref/branch/worktree creation/commit/fetch/push, protected
+scratch access/cleanup, rejected concurrent-manual test, baseline retry,
+external publication, live service or global telemetry access occurred.
+The original private Pass 6 backup was not touched. No new permission denial
+occurred in these three task-isolated checks; the historical denial remains
+retained and is not erased by the new explicit grant.
+
+Remaining owner/parent work: obtain a genuine SDK regression at an approved seam
+before any bounded synchronization/cleanup repair; then exact failed-command and
+normal-scheduler GREEN, named SDK race, formatting, focused vet and complete
+non-race tests of the two repaired packages. Broader package/race tests, clean
+cmd/server build, a new frozen candidate and independent standards/spec reviews
+remain pending. Baseline preparation remains stopped before process creation
+(objects 0, matrix 0/4), with no baseline retry here. No local check establishes
+upstream-baseline causality, Linux/durability/runtime/UI or full SPEC66/79
+acceptance. Historical blocked gates remain blocked, not silently promoted.
+
+
+## Pass 7d owner validation receipt (2026-10-26; stopped on original SDK functional RED)
+
+### Scope and preserved starting state
+
+This was direct owner validation of the actual middleware-only repaired worktree,
+not a routing task, an SDK repair or a staged freeze. No nested Codex process,
+agent, route validator, settings/security/permission change, provider/service
+operation or baseline retry was used. The existing Pass 6 and Pass 7b/7c history
+is preserved. In particular, the clean Pass 7c middleware race execution and its
+SDK normal/cpu=1 non-reproductions are not rewritten or promoted to broader
+acceptance.
+
+Read-only starting checks used GIT_OPTIONAL_LOCKS=0 and GIT_NO_LAZY_FETCH=1:
+branch `claude/spec66-resource-catalog`, HEAD/base
+`a4acc9f752bd46571f737a10c04bf413656ab06b`; original cached change set remained
+51 files, +7751/-51. The raw identities matched the dispatched values:
+
+- Cached binary diff against the pinned base: SHA256
+  `eebc1ae61b90da02c1293f09a2bac129991339b5d9644f7efbc493cf9118a777`.
+- Index file: SHA256
+  `01e11b190172f6af2922903329519a73c99e2ae0fb6cb8f9ad98da620ff3ef46`.
+- Raw `git for-each-ref --format=%(refname) %(objectname)` stdout: SHA256
+  `c8a30bba3783770da61923945250c55d32700a718afd8c8509672c17949e6410`.
+
+Exactly two unstaged paths existed: `internal/api/middleware/response_writer.go`
+and this verification document. No untracked project artifacts existed.
+`pass7d-start-integrity.json` retains these checks, dirty-path file hashes and
+378 SDK file hashes. The entire pre-append document was saved externally as
+`pass7d-doc-prefix.bin` (87296 bytes, SHA256
+`c8afbf00758d43c0241d462cf99a92e06c92d19adc22d70bb343592bf52dfc42`), and the
+existing Pass 7c append was confirmed to be exactly 185 lines beyond the index.
+
+All new evidence is exclusive `pass7d-*` material under the EXISTING root:
+
+```text
+C:\Users\will\AppData\Local\Temp\cpa-spec66-followup-db557e1f236f494aa64dfa28b69fd9c9
+```
+
+No old receipt, private Pass 6 backup, cache location or original runner was
+replaced. No staging/index/refs/branch/commit/push/deploy action occurred.
+
+### Existing task-only telemetry OFF environment
+
+The existing `telemetry-off-pass7c-20261026` directory was reused without any
+creation or modification. Before and after the sole Go invocation it contained
+ONLY `mode`, exactly 14 bytes `off 2026-10-26`, with SHA256
+`3a28ae910769fee6d2be951fb9d8c5d980e67a30e27c9e74fe9cceefd2c0ed4f`.
+GO_TELEMETRY_CHILD=1 was not inherited. The process-only telemetry override was
+`TEST_TELEMETRY_DIR=<ROOT>\telemetry-off-pass7c-20261026`; the runner and its
+descendants inherited it. Git read-only flags were also process-scoped.
+
+The unchanged original `go.ps1` SHA256 was
+`b33198b4c339f6a586880ed895fb3b10b207a1d78dc3117433a1964b9d50a609` before and
+after execution. It retained GOCACHE=`<ROOT>\cache`, GOTMPDIR=`<ROOT>\build`,
+GOPROXY=off, GOSUMDB=off, GOTOOLCHAIN=local and its existing local GCC/PATH.
+These existing caches were reused normally, not relocated or replaced;
+GOMODCACHE remained inherited and unchanged. No alternate cache was created.
+No global telemetry/config/token/counter directory was inspected or changed;
+no Go telemetry command, GOTELEMETRY override or persistent environment change
+was used.
+
+The six shipped-source hashes in the retained `pass7c-source-proof.json` were
+read back and verified unchanged; `pass7d-source-proof-readback.json` records
+this check. That retained source proof describes the TEST_TELEMETRY_DIR shim,
+OpenDir selecting the supplied directory before counter.Open, and OFF returns
+before counter writes, local stat, upload-token acquisition and sidecar start.
+The unchanged mode/sole-file observations and source proof are NOT a network
+trace. No new permission/filesystem/environment denial was observed; the earlier
+telemetry denial history remains preserved.
+
+### Sole executed Go validation and actual failure
+
+Exact command (the quoted selector is one argv element; complete argv and
+process-only overrides are retained in the receipt):
+
+```text
+powershell.exe -NoProfile -File <ROOT>\go.ps1 -C D:/WILL/AGENT/CPA/CLIProxyAPI-source test -race ./sdk/cliproxy -run '^(TestHandleAuthUpdates_SameRevisionWaitDoesNotWaitForOtherAuthInBatch|TestEndToEndAuthFileReplacement_RestoresModelsInV1ModelsWithoutRestart|TestEndToEndAuthFilePatch_RestoresModelsInV1ModelsWithoutRestart)$' -count=10 -v -timeout=180s
+```
+
+Receipt prefix: `pass7d-sdk-original-race`. The invocation started
+`2026-10-26T12:56:39.765635+08:00` and finished
+`2026-10-26T12:58:12.032106+08:00`; actual runner/Go exit was **1**, wall time
+**92.268872300 seconds**. Package output reported **47.632s**. All 30 named
+instances completed within that one invocation: **27 PASS, 3 FAIL**, with each
+of the three named tests passing nine times and failing once. No retry,
+increased count or CPU stress matrix was run.
+
+Complete, unfiltered process stdout (17964 bytes) and stderr (0 bytes), along
+with exact argv, timing, exit, runner hash, before/after mode observations and
+source hashes, are retained in `.stdout.log`, `.stderr.log`, `.argv.json` and
+`.result.json`. Their SHA256 values are:
+
+- stdout: `1ef12c20a6fb37cfe84f1ab0a7cd57b2546128c35c7726f2d7277b89f8ab0100`.
+- stderr: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Actual failure diagnostics, all in stdout:
+
+```text
+service_auth_sync_test.go:763: auth A hook wait blocked on unrelated auth B registration
+service_auth_sync_test.go:1397: expected "gpt-6-astra" to be absent after terminal auth failure
+service_auth_sync_test.go:1557: expected "gpt-6-astra" to be absent after terminal auth failure
+```
+
+`pass7d-failure-summary.json` retains the exact stdout line references, test
+occurrences and outcome counts. The assertions failed sequentially in the
+original chain. There was **no `WARNING: DATA RACE`** in the output: this is a
+functional RED observed under `-race`, not a reported data race or permission
+denial. Sequential adjacency does not prove contamination, hook identity,
+root cause or baseline-only causality. No paired baseline exists here; the
+historical failures remain unattributed. The no-identity func() registration
+hook's invocation order is not treated as auth B identity.
+
+SDK production code, tests, fixtures, assertions, hooks and API seams were NOT
+modified. Pass 7c had no reproduced SDK RED; Pass 7d now has the actual original
+functional RED above. Accordingly, it would be false to describe this task as
+having no reproduced RED. This is evidence for a subsequent bounded owner
+repair, **not an SDK repair or RED-to-GREEN claim**. No manufactured regression,
+fixture reversal, fake scheduler or weakened assertion was introduced.
+
+### Ordered stop, intentionally skipped checks and remaining gates
+
+After the failed first command, no further Go/gofmt/vet/build work ran:
+
+| Ordered step | Actual status |
+| --- | --- |
+| 1. Original named SDK chain, race/count=10 | FAILED as recorded above; sole Go invocation |
+| 2. gofmt only response_writer.go | SKIPPED after functional failure; no formatting write |
+| 3. Complete related-package non-race check | SKIPPED; no package selector substitution |
+| 4. Related vet coverage | SKIPPED |
+| 5. Fresh required cmd/server compile | SKIPPED; target did not preexist and was not created |
+| 6. Append factual English receipt | This append only; entire previous prefix preserved |
+| 7. Read-only final integrity/candidate identity | Retained externally in pass7d-final-integrity.json |
+
+No fresh `cli-proxy-api-pass7d-20261026-check.exe` exists and no executable was
+run. The prior Pass 6 executable is untouched and is not build evidence for
+this worktree. The middleware close -> worker join -> channel nil repair and
+its English comment were preserved byte-for-byte; source SHA256 before and
+after the failed command was
+`3e7df65c701fd0b1af6ee8a2c3d7a7737486830c9107d12d9845ca830c140b55`.
+There is no post-format hash because formatting did not run.
+
+The external final readback records original cached/index/refs/runner checks,
+full unstaged/untracked lists, SDK byte equality, document prefix preservation,
+whitespace command outputs/exits, source/final document hashes, and the raw
+`git diff --binary a4acc9f752bd46571f737a10c04bf413656ab06b --` working-tree
+candidate identity/stat/count. The candidate includes staged and unstaged
+changes and is NOT a staged freeze or commit. No candidate hash is embedded in
+this document, avoiding self-reference. Base...HEAD remains empty.
+
+The SDK RED requires a separately bounded owner repair before resuming these
+ordered verification gates. Independent Standards and Spec static reviews,
+formatting, related tests/vet, a fresh required build, staging/commit and all
+other unfulfilled acceptance gates remain pending. The baseline attempt is
+still unresolved at objects 0, matrix 0/4; no retry or baseline attribution was
+made. No full-repository, Linux, durability, clone/rollback/power-loss, runtime,
+UI or full SPEC66/79 acceptance is claimed. Historical limitations are not
+weakened by this failure receipt. The completed verification subprocess was
+joined; no validation task remains running at handoff.
+
+
+## Pass7e - bounded owner test coordination repair (2026-10-26)
+
+### Scope and preserved original RED
+
+This pass directly repaired only the coordination and cleanup inside
+`TestHandleAuthUpdates_SameRevisionWaitDoesNotWaitForOtherAuthInBatch`, plus
+its required `sync` import. The actual `handleAuthUpdates` / `handleAuthUpdate`
+SDK seam and the existing no-argument `modelRegistrationTaskHook` remain in
+use. No SDK production source, hook signature, collaborator, auth/provider
+fixture, classification, or business behavior was changed. This was one
+coherent test-only edit; no additional repair iteration was needed.
+
+Starting integrity matched branch `claude/spec66-resource-catalog`, HEAD/base
+`a4acc9f752bd46571f737a10c04bf413656ab06b`, the pinned cached diff, index,
+refs, runner, full working-tree diff and both existing unstaged files.
+`pass7e-start-integrity.json` records the actual hashes and the original RED
+readback. Existing private backups, receipts, index, refs, and history were
+not rewritten. The baseline remains blocked at objects 0 and matrix 0/4.
+
+The preserved `pass7d-sdk-original-race` command was not rerun or manufactured:
+actual exit **1**, wall **92.2688723s**, package **47.632s**,
+**27 PASS / 3 FAIL** among 30 named cases, with each of the three failures on
+its seventh occurrence. The diagnostics were:
+
+- original line 763: `auth A hook wait blocked on unrelated auth B registration`;
+- original lines 1397 and 1557: `expected "gpt-6-astra" to be absent after terminal auth failure`.
+
+That was functional RED under race instrumentation, not a detected data race:
+no `WARNING: DATA RACE`, no permission/environment denial. Its stdout SHA256
+is `1ef12c20a6fb37cfe84f1ab0a7cd57b2546128c35c7726f2d7277b89f8ab0100`;
+empty stderr SHA256 is `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The original SDK file hash was
+`f41aed1cbbb0ac194951e5b83e052fa36e2ecc441f23bb4eb99a583355700333`.
+Historical original normal/cpu1 passes are non-reproductions, not repair
+proof. Neither the original failure sequence nor subsequent GREEN establishes
+baseline attribution or proves downstream registry pollution causality.
+
+### Identity-safe scheduling, assertions, and cleanup
+
+The existing hook runs before `task.run` in parallel registration workers;
+its invocation ordinal does not identify an auth. Both original tasks now
+publish separate private gates and remain blocked before either registration
+can execute. Same-revision duplicates are launched for both actual update
+IDs, and each completion carries that update's real ID. Releasing exactly
+one gate lets the completed duplicate identify the ready auth without
+assigning A/B from worker order. The test validates its ID, requires the
+other duplicate and original batch to remain incomplete while the second
+gate stays closed, then releases that gate and requires the distinct other
+auth ID and the batch to finish. It also rejects duplicate completion before
+either original gate is released. The semantic per-auth independence
+assertion is preserved, with explicit blocked-other/batch and identity checks.
+No private per-auth wait-map inspection, new business seam, fake collaborator,
+wall-clock sleep, fixture reclassification, or weakened absence/recovery
+assertion was introduced. Existing two-second waits are deadlock safety
+bounds rather than scheduling sleeps.
+
+Completion-aware cleanup is installed before launching callers. Its shared
+release is idempotent (`sync.Once`); both arrival publication and gate waits
+select on this release, including unexpected hook invocations. Buffered
+completion channels permit every duplicate to exit even after a fatal
+assertion. The cleanup releases all hooks, joins the original batch and both
+duplicates through a `WaitGroup`, and only then clears the hook. Because this
+cleanup was registered after the existing registry cleanup, LIFO execution
+joins callers before unregistering either client. The batch itself waits for
+its registration workers. Thus cleanup ownership no longer permits these
+callers to register after client cleanup. This is code-path evidence;
+no extra forced-fatal experiment was run, and arbitrary production deadlocks
+are still bounded by the Go test timeout rather than claimed impossible.
+
+`pass7e-scope-proof.json` verifies that all file bytes outside this function
+and the one added import are identical. In particular the complete replacement
+and patch tests, including terminal-error absence and actual `/v1/models`
+recovery assertions, are byte-identical:
+
+- Replacement: 6353 bytes,
+  SHA256 `9e57b7809509dc90a83fe3bf9da62f9f16b1dbf6b94e5c2d5e52e8ba05b5b897`.
+- Patch: 5124 bytes,
+  SHA256 `c25f7ea12abe689d15aec27bbd2c83b6685ee3f9e4bc67d1153b4fa586dcf2a6`.
+
+### Actual commands and results on formatted source
+
+All receipts below are in the existing external directory
+`C:\Users\will\AppData\Local\Temp\cpa-spec66-followup-db557e1f236f494aa64dfa28b69fd9c9` (abbreviated `R`).
+Every prefix has new `.argv.json`, `.result.json`, complete unfiltered
+`.stdout.log`, and `.stderr.log` files. Results record actual process exit,
+start/end/wall timing, stdout/stderr sizes and hashes, source hashes, runner
+hash, scoped environment, and before/after OFF directory observations.
+The recorded child exits and package/test results, not a wrapper exit alone,
+are the basis of the following results. All five commands had empty stderr.
+
+```powershell
+$R = 'C:\Users\will\AppData\Local\Temp\cpa-spec66-followup-db557e1f236f494aa64dfa28b69fd9c9'
+$S = '^(TestHandleAuthUpdates_SameRevisionWaitDoesNotWaitForOtherAuthInBatch|TestEndToEndAuthFileReplacement_RestoresModelsInV1ModelsWithoutRestart|TestEndToEndAuthFilePatch_RestoresModelsInV1ModelsWithoutRestart)$'
+# Each command inherits process-only TEST_TELEMETRY_DIR=$R\telemetry-off-pass7c-20261026
+# and GIT_OPTIONAL_LOCKS=0, GIT_NO_LAZY_FETCH=1.
+& 'C:\Program Files\Go\bin\gofmt.exe' -w sdk/cliproxy/service_auth_sync_test.go internal/api/middleware/response_writer.go
+powershell.exe -NoProfile -File "$R\go.ps1" -C D:/WILL/AGENT/CPA/CLIProxyAPI-source test -race ./sdk/cliproxy -run $S -count=10 -v -timeout=180s
+powershell.exe -NoProfile -File "$R\go.ps1" -C D:/WILL/AGENT/CPA/CLIProxyAPI-source test ./sdk/cliproxy -run $S -count=10 -v -timeout=180s
+powershell.exe -NoProfile -File "$R\go.ps1" -C D:/WILL/AGENT/CPA/CLIProxyAPI-source vet ./internal/api/middleware ./sdk/cliproxy
+powershell.exe -NoProfile -File "$R\go.ps1" -C D:/WILL/AGENT/CPA/CLIProxyAPI-source test ./internal/api/middleware ./sdk/cliproxy -count=1 -v -timeout=240s
+```
+
+| Receipt prefix | Actual exit | Wall seconds | Test/tool outcome |
+| --- | ---: | ---: | --- |
+| `pass7e-format` | 0 | 0.3419764 | Only the two approved Go files; neither file's bytes changed |
+| `pass7e-sdk-race` | 0 | 60.9684287 | 30 PASS / 0 FAIL; each selected test 10/10; package 42.681s |
+| `pass7e-sdk-normal` | 0 | 15.9992663 | 30 PASS / 0 FAIL; each selected test 10/10; package 6.581s |
+| `pass7e-vet` | 0 | 4.6008799 | Focused vet of the two approved packages, no diagnostics |
+| `pass7e-full-two-packages` | 0 | 21.5082735 | Both full non-race packages passed; 214 top-level PASS, 0 top-level SKIP, 0 FAIL |
+
+Full package result lines:
+
+```text
+ok  	github.com/router-for-me/CLIProxyAPI/v8/internal/api/middleware	4.358s
+ok  	github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy	12.108s
+```
+
+No race detector warning or new permission/filesystem/environment denial was
+observed in these checks. The corrected race/normal command chains retained
+all three selected tests. The original middleware lifecycle repair was kept:
+close the chunk channel, wait for its reader's `streamDone`, then clear the
+channel field. Gofmt did not change its bytes; this pass added no middleware
+logic. Full non-race package success is not a new full-package race run.
+
+Formatted SDK test SHA256:
+`f105f8fe8732bd7d8efd6fc429779c23555cf05666a047272fdc3d77a5f3f499`.
+Middleware SHA256 before and after formatting/testing:
+`3e7df65c701fd0b1af6ee8a2c3d7a7737486830c9107d12d9845ca830c140b55`.
+
+### Task-only OFF mode and integrity boundaries
+
+Before and after every Go/gofmt/vet command, the same task OFF directory
+contained only `mode`, exactly 14 bytes `off 2026-10-26`, SHA256
+`3a28ae910769fee6d2be951fb9d8c5d980e67a30e27c9e74fe9cceefd2c0ed4f`.
+`GO_TELEMETRY_CHILD=1` was not present. Every tool process inherited only the
+approved process-scoped `TEST_TELEMETRY_DIR` selection, with unchanged Git
+safety environment and original runner settings. The runner remained SHA256
+`b33198b4c339f6a586880ed895fb3b10b207a1d78dc3117433a1964b9d50a609`.
+GOCACHE stayed `R\cache`, GOTMPDIR `R\build`, GOPROXY/GOSUMDB `off`,
+GOTOOLCHAIN `local`, and the existing GCC/PATH prefix was reused.
+GOMODCACHE was inherited unchanged, not relocated; cache contents may
+naturally change during verification and are not claimed byte-identical.
+No global telemetry/config/credential survey or settings command was run.
+The retained prior source proof and these directory observations are not a
+network trace and do not prove impossible global activity.
+
+This English section is append-only after the complete original 96462-byte
+document prefix, SHA256
+`3221c930199a49ec2feaa691b4a6fe9096a771bd19e1fc7ce32bf1392056c918`.
+The final external `pass7e-final-integrity.json` records prefix preservation,
+source/document hashes, full raw working-tree binary-diff SHA256/byte count
+and stat versus the pinned base, cached/index/refs/runner equality, exact
+unstaged/untracked paths, and whitespace-check outputs/exits. The raw
+candidate diff is external; its hash is deliberately not embedded in this
+hashed document. The candidate remains a working tree, not a staged freeze
+or commit. Base...HEAD remains empty. Only the SDK test, pre-existing
+middleware repair, and this verification document are unstaged.
+
+### Remaining verification and handoff limits
+
+The bounded repair and ordered focused checks above are complete. Broader
+related-package/repository validation, a fresh required `cmd/server` build,
+and independent Standards and Spec reviews remain for the parent. This pass
+did not run a server EXE, contact live services/providers, stage/commit/push,
+change model policy or global settings, create agents, or execute nested
+Codex. It made no Linux/durability/clone/rebind/rollback/power-loss/runtime/UI
+or full SPEC66/79 acceptance claim. Baseline evidence is still unresolved,
+not baseline-only attribution. Verification subprocesses were joined before
+handoff; no verification worker is intentionally left running.
+
+## Pass8b bounded follow-up receipt (2026-10-26)
+
+This receipt covers the three authorized follow-up blockers on Windows. It is
+not full SPEC66 acceptance, an independent review, a routing validation, or a
+baseline execution. The parent owns publication and independent Standards/Spec
+reviews after this worker exits.
+
+### Preservation and execution boundary
+
+Before source edits, the worker saved the exact raw full candidate to
+`<ROOT>/pass8b-preserved-candidate.patch` and checked the supplied candidate,
+HEAD, branch, cached diff, index, refs, protected middleware/SDK files, runner,
+and the original 107014-byte documentation prefix. Start evidence is
+`pass8b-start-integrity.json`. Git output used raw byte streams, not PowerShell
+text encoding. No staging, commits, ref/object writes, fetches, deployments,
+external publication, tool installation, Python, or nested agents were used.
+
+Every Go operation, including formatting through `go fmt` (which invokes gofmt
+only for the named changed Go files), used the original `<ROOT>/go.ps1` runner.
+Its cache/build directories, offline module settings, local toolchain and GCC
+were retained. Each Go receipt records raw stdout/stderr, argv, the actual child
+exit code, UTC timing, output hashes, and before/after telemetry checks. The
+supplied telemetry directory contained only the exact OFF mode file; the runner
+hash was checked before and after every command. These are source/environment
+receipts, not a network trace. No live credential, provider, OAuth, production
+service, browser, or personal settings operation was run by this worker.
+
+### Watcher event to real reload callback
+
+The unchanged original selector, `TestHandleEventConfigChangeSchedulesReload`,
+passed ten repetitions (23.140 seconds). The original related-full command also
+passed once (66.916 seconds). The supplied historical RED remains valid evidence
+but was not reproduced in these two runs; no production reload cause is claimed.
+
+Four falsifiable hypotheses were recorded before the probe: an observation
+before callback completion, a lost debounce callback, a file visibility/hash
+mismatch, and a config parse rejection. The test did have a provable observation
+race: its fixed 400ms sleep did not synchronize with the asynchronous callback.
+Only that test was changed to wait on a channel signaled by the real callback,
+then retain the exact-one count assertion. No production watcher/debounce logic,
+private map, fake callback path, new test hook, or timeout value was changed.
+The same ten-run loop and watcher packages passed afterward. Final repeated and
+race results are in the table below. Details: `pass8b-watcher-stage.json`.
+
+### Deprecated v0 saves versus native v8 protection
+
+An authenticated real HTTP PUT to `/v0/management/codex-api-key` reproduced the
+regression: a replacement carrying a caller ID received 500 from the new
+unambiguous-provenance refusal. Changing only the wrapper was insufficient: the
+lower regroup path still refused it. An explicit legacy-management save path
+now retains pre-catalog v0 semantics, excluding new source-projection/CAS rules.
+Ordinary config writers retain their existing source protection. The real v0
+HTTP regression turned green; route registrations were not changed.
+
+Feature HTTP tests now use the existing native
+`/v8/management/config/api-keys/<family>` boundary, not invented legacy routes
+under v8. Migrating the tests first exposed eight real RED refusal cases: native
+v8 incorrectly returned 200 for unknown IDs, copied IDs, stale source edits and
+cross-provider/parent membership. Validation now lives at the actual ConfigV8
+write boundary. Issued IDs remain scoped to family, kind and parent; stale
+source writers are refused before persistence. Unmarked new rows can still be
+enrolled. An exact source no-op remains valid after catalog marker enrollment.
+The normalized saved document is rebound to the next runtime writer receipt.
+
+The tests use native raw groups/keys rather than legacy filtered arrays or
+`items` envelopes. They retain meaningful round-trip, reorder, replacement,
+addition, refusal/no-write, manual ownership, filtered/keyless source,
+identity/version and real watcher/manager/executor assertions. Native raw-list
+deletion explicitly retains the untouched filtered source; filtered deletion,
+stale clones and failed-write ownership stay tested through the existing public
+config writer. Compatibility fixture headers were moved from unsupported child
+headers to the provider, retaining exact filtered-source assertions instead of
+weakening native schema validation.
+
+A further real HTTP RED covered the first GET/edit/PATCH immediately after
+enrollment, without the tests manually calling SetConfig: marker migration had
+left the handler's source receipt stale. Successful catalog initialization now
+refreshes its ResourceCatalog receipt from the current persisted source without
+replacing runtime key lists or other configuration sections. First-edit and
+external-stale refusal cases both passed afterward. Evidence:
+`pass8b-v0-stage.json`, `pass8b-v0-enrollment-stage.json` and their command receipts.
+
+### Typed-invalid sources must not publish ready inventory
+
+Six real API/catalog RED cases covered grouped and native flat layouts for
+sequence-valued `api-key`, `base-url`, and `headers`. Native config parsing
+rejected every fixture, but reconciliation previously returned success and
+published HTTP 200 with `complete=true` and ready rows. Generic YAML shape/layout
+validation did not apply native types, and credential seals ignored Decode
+errors, turning malformed credential fields into empty values.
+
+Inventory enumeration now performs native Config YAML decoding before building
+its proposal, without runtime sanitization or filtering. Credential Decode
+errors propagate through seal calculation before any proposal publication.
+The same API tests now require unavailable inventory/capabilities, no malformed
+source rewrite, and successful valid-source recovery with exact prior target
+and manual-state preservation. Raw disabled, keyless and zero-weight resources
+remain present; runtime readiness stays unknown and gate/query stay false.
+Two additional empty-provider cases cover base-url/headers validation when no
+flattened runtime row exists; they exercise the seal error path and valid
+identity-preserving recovery. No extra RED is claimed for this post-fix coverage.
+Evidence: `pass8b-types-stage.json`, `pass8b-types-empty-stage.json`. The initial
+`pass8b-types-red` receipt was a missing test-helper compilation error;
+`pass8b-types-red2` is the actual six-case functional RED.
+
+### Final formatted-code verification
+
+Exact argv and selectors are retained in each named JSON receipt. Commands use:
+
+```text
+powershell.exe -NoProfile -File <ROOT>/go.ps1 -C D:/WILL/AGENT/CPA/CLIProxyAPI-source <args>
+
+test ./internal/config ./internal/api ./internal/api/middleware ./internal/resourcecatalog ./internal/watcher/... ./sdk/auth ./sdk/cliproxy -count=1 -timeout=240s
+test -json ./... -count=1 -timeout=240s
+vet ./...
+build -o <ROOT>/cli-proxy-api-pass8b-20261026-check.exe ./cmd/server
+```
+
+The changed API selector was repeated twice; watcher selectors ten times.
+Focused race was split into two bounded groups with the same 360s timeout, not
+inflated. The original three SDK selectors and the original middleware selector
+were each repeated ten times in both ordinary and race modes. This is not a
+full-repository race run.
+
+| Receipt stem | Actual child exit | Wall seconds |
+|---|---:|---:|
+| `pass8b-final-focused2` | 0 | 41.231 |
+| `pass8b-final-watcher` | 0 | 17.125 |
+| `pass8b-final-race-a` | 0 | 150.289 |
+| `pass8b-final-race-b` | 0 | 136.564 |
+| `pass8b-final-sdk-normal` | 0 | 12.443 |
+| `pass8b-final-sdk-race` | 0 | 52.855 |
+| `pass8b-final-middleware-normal` | 0 | 7.007 |
+| `pass8b-final-middleware-race` | 0 | 10.168 |
+| `pass8b-final-related` | 0 | 127.651 |
+| `pass8b-final-fullrepo` | 0 | 396.719 |
+| `pass8b-final-vet` | 1 | 13.725 |
+| `pass8b-final-build` | 0 | 7.963 |
+
+The related-full run passed all nine package results. The full-repository JSON
+run reported 100 passing packages, 27 no-test-file package skips, and no failing
+packages/build failures. Test-result events, including subtests, were 16388 pass,
+0 fail and 9 skip; these are not a top-level-test count inferred from quiet
+output. Exact package outcomes and skipped test names are recorded in
+`pass8b-fullrepo-summary.json`. Skip reasons are in
+`pass8b-fullrepo-skip-reasons.json`: one opt-in live Devin test, six absent native
+signature/corpus tests, one unset TLS capture proxy, and one Windows
+case-insensitive environment test. These skips and uncompiled Linux paths are
+not waived coverage.
+
+A wider intermediate race selection timed out at the API package's aggregate
+360s deadline (394.975 seconds including compilation). The active stack was
+synthetic bcrypt computation, not a reported data race. That failure remains in
+`pass8b-final-race.json`; both split final race groups passed without changing
+crypto costs, assertions, or timeout values. Intermediate v0 wrapper-only and
+native-fixture/schema/receipt failures remain preserved in their receipts.
+
+**Vet remains failed (exit 1):** 13 unsafe.Pointer diagnostics in
+`internal/pluginhost/loader_windows.go` and its test, plus three copylocks
+warnings in `internal/runtime/executor/kimi_executor.go` and
+`internal/runtime/executor/oauth_scope_executor.go`. The raw diff of those four
+files to the supplied base is empty (`pass8b-vet-unmodified-files.json`). No
+baseline vet run was performed, so this is not a claimed reproduced baseline
+result. No unrelated repairs were made. The fresh EXE build passed exactly once
+at the new path and the binary was never executed.
+
+An initial helper text-match alarm came from historical denial text inside the
+preserved diff (git itself exited 0 with empty stderr), not a new permission
+refusal. A premature read of this helper's own deliberately exclusive active
+stdout hit a sharing lock; no alternative reader or bypass was used. Completed
+receipts were read only after the known owned command handle finished. No
+system-wide process survey was performed.
+
+The original documentation prefix is preserved byte-for-byte. Final raw diff,
+source hashes, protected-file/index/refs/runner checks, OFF state, build size/hash,
+and final diff checks are recorded separately in
+`pass8b-final-integrity.json` and `pass8b-validation-stage.json`; no
+self-referential final diff hash is embedded in this appendix.
+
+Remaining work is not waived: parent independent Standards/Spec review, the
+six full-SPEC groups, baseline 0/4, Linux evidence, and the broader durability,
+runtime/UI, clone/rebind, rollback and power-loss acceptance gates. In particular,
+the vet gate is still red; passing Windows tests and compilation are not full
+SPEC acceptance.
