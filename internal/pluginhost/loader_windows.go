@@ -163,7 +163,6 @@ func (c *dynamicLibraryClient) Call(ctx context.Context, method string, request 
 	defer func() {
 		_, _ = windows.LocalFree(windows.Handle(responseMem))
 	}()
-	response := (*windowsBuffer)(unsafe.Pointer(responseMem))
 	rc, _, _ := syscall.SyscallN(
 		c.api.call,
 		uintptr(unsafe.Pointer(methodBytes)),
@@ -173,13 +172,26 @@ func (c *dynamicLibraryClient) Call(ctx context.Context, method string, request 
 	)
 	runtime.KeepAlive(methodBytes)
 	runtime.KeepAlive(request)
-	var out []byte
-	if response.ptr != 0 && response.len > 0 {
-		out = unsafe.Slice((*byte)(unsafe.Pointer(response.ptr)), response.len)
-		out = append([]byte(nil), out...)
+	// Native allocations are addresses, not Go pointers. Copy through the OS
+	// rather than reconstructing a pointer from an integer after a callback.
+	var response windowsBuffer
+	if errRead := windows.ReadProcessMemory(windows.CurrentProcess(), responseMem, (*byte)(unsafe.Pointer(&response)), unsafe.Sizeof(response), nil); errRead != nil {
+		return nil, fmt.Errorf("read plugin response descriptor: %w", errRead)
 	}
 	if response.ptr != 0 {
-		_, _, _ = syscall.SyscallN(c.api.freeBuffer, response.ptr, response.len)
+		defer func() {
+			_, _, _ = syscall.SyscallN(c.api.freeBuffer, response.ptr, response.len)
+		}()
+	}
+	var out []byte
+	if response.ptr != 0 && response.len > 0 {
+		if response.len > uintptr(^uint(0)>>1) {
+			return nil, fmt.Errorf("plugin response length exceeds Go buffer capacity")
+		}
+		out = make([]byte, int(response.len))
+		if errRead := windows.ReadProcessMemory(windows.CurrentProcess(), response.ptr, &out[0], response.len, nil); errRead != nil {
+			return nil, fmt.Errorf("read plugin response body: %w", errRead)
+		}
 	}
 	if rc != 0 {
 		if isPluginErrorEnvelope(out) {
@@ -228,16 +240,15 @@ func (c *dynamicLibraryClient) close() {
 	}
 }
 
-func windowsHostCall(hostCtx uintptr, methodPtr uintptr, requestPtr uintptr, requestLen uintptr, responsePtr uintptr) uintptr {
-	if responsePtr != 0 {
-		response := (*windowsBuffer)(unsafe.Pointer(responsePtr))
+func windowsHostCall(hostCtx *uintptr, methodPtr *byte, requestPtr *byte, requestLen uintptr, response *windowsBuffer) uintptr {
+	if response != nil {
 		response.ptr = 0
 		response.len = 0
 	}
-	if hostCtx == 0 || methodPtr == 0 {
+	if hostCtx == nil || methodPtr == nil {
 		return 1
 	}
-	id := *(*uintptr)(unsafe.Pointer(hostCtx))
+	id := *hostCtx
 	rawHost, okHost := windowsHostCallbackEntries.Load(id)
 	if !okHost {
 		return 1
@@ -247,24 +258,26 @@ func windowsHostCall(hostCtx uintptr, methodPtr uintptr, requestPtr uintptr, req
 		return 1
 	}
 	var request []byte
-	if requestPtr != 0 && requestLen > 0 {
-		request = unsafe.Slice((*byte)(unsafe.Pointer(requestPtr)), requestLen)
+	if requestPtr != nil && requestLen > 0 {
+		request = unsafe.Slice(requestPtr, requestLen)
 		request = append([]byte(nil), request...)
 	}
 	ctx := withHostCallbackIdentity(context.Background(), entry.pluginID, entry.instance)
-	resp, errCall := entry.host.callFromPlugin(ctx, windowsString(methodPtr), request)
+	resp, errCall := entry.host.callFromPlugin(ctx, windows.BytePtrToString(methodPtr), request)
 	if errCall != nil {
 		resp = marshalRPCError("host_call_failed", errCall.Error(), clienterror.HTTPStatusFromError(errCall))
 	}
-	if len(resp) == 0 || responsePtr == 0 {
+	if len(resp) == 0 || response == nil {
 		return 0
 	}
 	mem, errAlloc := windows.LocalAlloc(windows.LMEM_FIXED, uint32(len(resp)))
 	if errAlloc != nil || mem == 0 {
 		return 1
 	}
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(mem)), len(resp)), resp)
-	response := (*windowsBuffer)(unsafe.Pointer(responsePtr))
+	if errWrite := windows.WriteProcessMemory(windows.CurrentProcess(), mem, &resp[0], uintptr(len(resp)), nil); errWrite != nil {
+		_, _ = windows.LocalFree(windows.Handle(mem))
+		return 1
+	}
 	response.ptr = mem
 	response.len = uintptr(len(resp))
 	return 0
@@ -275,19 +288,4 @@ func windowsHostFree(ptr uintptr, len uintptr) uintptr {
 		_, _ = windows.LocalFree(windows.Handle(ptr))
 	}
 	return 0
-}
-
-func windowsString(ptr uintptr) string {
-	if ptr == 0 {
-		return ""
-	}
-	bytes := make([]byte, 0)
-	for offset := uintptr(0); ; offset++ {
-		b := *(*byte)(unsafe.Pointer(ptr + offset))
-		if b == 0 {
-			break
-		}
-		bytes = append(bytes, b)
-	}
-	return string(bytes)
 }

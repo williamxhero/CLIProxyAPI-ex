@@ -5,6 +5,7 @@ package pluginhost
 import (
 	"context"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -49,7 +50,6 @@ func TestWindowsClosedClientKeepsResidentHostState(t *testing.T) {
 			shutdown:   syscall.NewCallback(testWindowsCloseShutdown),
 		},
 	}
-	ctxPtr := uintptr(unsafe.Pointer(hostCtx))
 
 	client.close()
 
@@ -77,10 +77,54 @@ func TestWindowsClosedClientKeepsResidentHostState(t *testing.T) {
 	if errMethod != nil {
 		t.Fatalf("BytePtrFromString() error = %v", errMethod)
 	}
-	if rc := windowsHostCall(ctxPtr, uintptr(unsafe.Pointer(methodBytes)), 0, 0, 0); rc == 0 {
+	if rc := windowsHostCall(hostCtx, methodBytes, nil, 0, nil); rc == 0 {
 		t.Fatal("windowsHostCall() with detached context succeeded, want failure")
 	}
 	windowsResidentHostState.Delete(id)
+}
+
+func TestWindowsHostCallNativeCallbackReturnsErrorEnvelope(t *testing.T) {
+	id := windowsHostCallbackID.Add(1)
+	hostCtx := new(uintptr)
+	*hostCtx = id
+	windowsResidentHostState.Store(id, windowsResidentHostBlocks{hostCtx: hostCtx})
+	windowsHostCallbackEntries.Store(id, dynamicHostCallbackEntry{host: New(), pluginID: "native-callback-test", instance: &hostCallbackInstance{}})
+	t.Cleanup(func() {
+		windowsHostCallbackEntries.Delete(id)
+		windowsResidentHostState.Delete(id)
+	})
+	method, errMethod := syscall.BytePtrFromString("test.unsupported")
+	if errMethod != nil {
+		t.Fatal(errMethod)
+	}
+	request := []byte(`{"probe":true}`)
+	mem, errAlloc := windows.LocalAlloc(windows.LMEM_FIXED|windows.LMEM_ZEROINIT, uint32(unsafe.Sizeof(windowsBuffer{})))
+	if errAlloc != nil || mem == 0 {
+		t.Fatalf("allocate native response descriptor: %v", errAlloc)
+	}
+	defer func() { _, _ = windows.LocalFree(windows.Handle(mem)) }()
+	rc, _, _ := syscall.SyscallN(windowsHostCallCallback, uintptr(unsafe.Pointer(hostCtx)),
+		uintptr(unsafe.Pointer(method)), uintptr(unsafe.Pointer(&request[0])), uintptr(len(request)), mem)
+	runtime.KeepAlive(method)
+	runtime.KeepAlive(request)
+	if rc != 0 {
+		t.Fatalf("native host callback status=%d, want an error envelope", rc)
+	}
+	var response windowsBuffer
+	if errRead := windows.ReadProcessMemory(windows.CurrentProcess(), mem, (*byte)(unsafe.Pointer(&response)), unsafe.Sizeof(response), nil); errRead != nil {
+		t.Fatal(errRead)
+	}
+	if response.ptr == 0 || response.len == 0 {
+		t.Fatalf("native callback did not populate response descriptor: %+v", response)
+	}
+	defer func() { _, _, _ = syscall.SyscallN(windowsHostFreeCallback, response.ptr, response.len) }()
+	body := make([]byte, response.len)
+	if errRead := windows.ReadProcessMemory(windows.CurrentProcess(), response.ptr, &body[0], response.len, nil); errRead != nil {
+		t.Fatal(errRead)
+	}
+	if !isPluginErrorEnvelope(body) || !strings.Contains(string(body), "unsupported host callback test.unsupported") {
+		t.Fatalf("native callback error envelope=%s", body)
+	}
 }
 
 func TestDynamicLibraryClientCallSurvivesReentrantCallbackStackGrowth(t *testing.T) {
@@ -101,8 +145,8 @@ func TestDynamicLibraryClientCallSurvivesReentrantCallbackStackGrowth(t *testing
 	}
 }
 
-func testReentrantPluginCall(_, _, _, responsePtr uintptr) uintptr {
-	if testReentrantHostCallback == 0 || responsePtr == 0 {
+func testReentrantPluginCall(_, _ *byte, _ uintptr, response *windowsBuffer) uintptr {
+	if testReentrantHostCallback == 0 || response == nil {
 		return 1
 	}
 	_, _, _ = syscall.SyscallN(testReentrantHostCallback)
@@ -112,8 +156,10 @@ func testReentrantPluginCall(_, _, _, responsePtr uintptr) uintptr {
 	if errAlloc != nil || mem == 0 {
 		return 1
 	}
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(mem)), len(raw)), raw)
-	response := (*windowsBuffer)(unsafe.Pointer(responsePtr))
+	if errWrite := windows.WriteProcessMemory(windows.CurrentProcess(), mem, &raw[0], uintptr(len(raw)), nil); errWrite != nil {
+		_, _ = windows.LocalFree(windows.Handle(mem))
+		return 1
+	}
 	response.ptr = mem
 	response.len = uintptr(len(raw))
 	return 0
@@ -185,8 +231,8 @@ func TestDynamicLibraryClientCallKeepsRequestMemoryAlive(t *testing.T) {
 	}
 }
 
-func testLivenessPluginCall(methodPtr, requestPtr, requestLen, responsePtr uintptr) uintptr {
-	if methodPtr == 0 || requestPtr == 0 || requestLen == 0 || responsePtr == 0 {
+func testLivenessPluginCall(methodPtr, requestPtr *byte, requestLen uintptr, response *windowsBuffer) uintptr {
+	if methodPtr == nil || requestPtr == nil || requestLen == 0 || response == nil {
 		return 1
 	}
 
@@ -201,7 +247,7 @@ func testLivenessPluginCall(methodPtr, requestPtr, requestLen, responsePtr uintp
 		return 2
 	}
 
-	buf := unsafe.Slice((*byte)(unsafe.Pointer(requestPtr)), requestLen)
+	buf := unsafe.Slice(requestPtr, requestLen)
 	if buf[0] != 0xAA || buf[requestLen-1] != 0x55 {
 		testLivenessCallbackReadCorrupted.Store(true)
 		return 3
@@ -212,9 +258,39 @@ func testLivenessPluginCall(methodPtr, requestPtr, requestLen, responsePtr uintp
 	if errAlloc != nil || mem == 0 {
 		return 1
 	}
-	copy(unsafe.Slice((*byte)(unsafe.Pointer(mem)), len(raw)), raw)
-	response := (*windowsBuffer)(unsafe.Pointer(responsePtr))
+	if errWrite := windows.WriteProcessMemory(windows.CurrentProcess(), mem, &raw[0], uintptr(len(raw)), nil); errWrite != nil {
+		_, _ = windows.LocalFree(windows.Handle(mem))
+		return 1
+	}
 	response.ptr = mem
 	response.len = uintptr(len(raw))
 	return 0
+}
+
+var testInvalidResponseFrees atomic.Int64
+
+func testInvalidResponseCall(_, _ *byte, _ uintptr, response *windowsBuffer) uintptr {
+	response.ptr = 1
+	response.len = 1
+	return 0
+}
+
+func testInvalidResponseFree(_, _ uintptr) uintptr {
+	testInvalidResponseFrees.Add(1)
+	return 0
+}
+
+func TestDynamicLibraryClientCallRejectsInvalidNativeResponseAndFreesIt(t *testing.T) {
+	before := testInvalidResponseFrees.Load()
+	client := &dynamicLibraryClient{api: windowsPluginAPI{
+		call:       syscall.NewCallback(testInvalidResponseCall),
+		freeBuffer: syscall.NewCallback(testInvalidResponseFree),
+	}}
+	got, err := client.Call(context.Background(), "test.invalid-response", nil)
+	if err == nil || !strings.Contains(err.Error(), "read plugin response body") || got != nil {
+		t.Fatalf("invalid native response was not rejected: got=%q err=%v", got, err)
+	}
+	if frees := testInvalidResponseFrees.Load() - before; frees != 1 {
+		t.Fatalf("native response free calls=%d, want 1 even after a read failure", frees)
+	}
 }

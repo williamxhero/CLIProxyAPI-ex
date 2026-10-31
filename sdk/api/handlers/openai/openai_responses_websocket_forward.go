@@ -367,11 +367,13 @@ func completeResponsesWebsocketLocalInterrupt(
 		cancel(errSet)
 		return output, responseID, sortedStringSet(pendingToolCallIDs), nil, errSet
 	}
+	// Stop the HTTP execution before acknowledging interruption. Once the
+	// client sees the terminal event it may immediately start its next turn.
+	cancel(context.Canceled)
 	if errWrite := writeResponsesWebsocketPayload(writer, wsTimelineLog, incomplete, time.Now()); errWrite != nil {
 		cancel(errWrite)
 		return output, responseID, sortedStringSet(pendingToolCallIDs), nil, errWrite
 	}
-	cancel(context.Canceled)
 	return output, responseID, sortedStringSet(pendingToolCallIDs), nil, nil
 }
 

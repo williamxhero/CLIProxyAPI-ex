@@ -270,8 +270,10 @@ func (e *homeInterruptExecutor) InterruptExecutionSession(ctx context.Context, s
 }
 
 type blockingHTTPInterruptExecutor struct {
-	calls    atomic.Int32
-	canceled atomic.Bool
+	calls                atomic.Int32
+	canceled             atomic.Bool
+	firstContext         chan context.Context
+	cancellationObserved chan struct{}
 }
 
 func (*blockingHTTPInterruptExecutor) Identifier() string { return "codex" }
@@ -282,6 +284,9 @@ func (*blockingHTTPInterruptExecutor) Execute(context.Context, *coreauth.Auth, c
 
 func (e *blockingHTTPInterruptExecutor) ExecuteStream(ctx context.Context, _ *coreauth.Auth, _ coreexecutor.Request, _ coreexecutor.Options) (*coreexecutor.StreamResult, error) {
 	call := e.calls.Add(1)
+	if call == 1 {
+		e.firstContext <- ctx
+	}
 	chunks := make(chan coreexecutor.StreamChunk, 2)
 	go func() {
 		defer close(chunks)
@@ -293,6 +298,7 @@ func (e *blockingHTTPInterruptExecutor) ExecuteStream(ctx context.Context, _ *co
 		chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.created","response":{"id":"r-http"}}`)}
 		<-ctx.Done()
 		e.canceled.Store(true)
+		close(e.cancellationObserved)
 	}()
 	return &coreexecutor.StreamResult{Chunks: chunks}, nil
 }
@@ -317,7 +323,10 @@ func (*blockingHTTPInterruptExecutor) InterruptExecutionSession(context.Context,
 // cancels an HTTP upstream turn and lets the same socket continue.
 func TestResponsesInterruptStopsHTTPUpstream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	executor := &blockingHTTPInterruptExecutor{}
+	executor := &blockingHTTPInterruptExecutor{
+		firstContext:         make(chan context.Context, 1),
+		cancellationObserved: make(chan struct{}),
+	}
 	manager := coreauth.NewManager(nil, nil, nil)
 	manager.SetConfig(&config.Config{})
 	manager.RegisterExecutor(executor)
@@ -371,6 +380,16 @@ func TestResponsesInterruptStopsHTTPUpstream(t *testing.T) {
 	}
 	if got := gjson.GetBytes(interrupted, "response.incomplete_details.reason").String(); got != "interrupted" {
 		t.Fatalf("interrupt reason = %q, payload %s", got, interrupted)
+	}
+	// The acknowledgement must follow cancellation itself, not merely a
+	// goroutine being scheduled to observe it. Check both without a sleep.
+	if err := (<-executor.firstContext).Err(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("interrupt acknowledged before HTTP upstream cancellation: %v", err)
+	}
+	select {
+	case <-executor.cancellationObserved:
+	case <-time.After(5 * time.Second):
+		t.Fatal("HTTP upstream did not observe cancellation")
 	}
 	if !executor.canceled.Load() {
 		t.Fatal("http upstream was not canceled")
